@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceNote Pro - Tốc độ ánh sáng</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 320px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .paper {
+            min-height: calc(100vh - 220px);
+            line-height: 2;
+            outline: none;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .recording-pulse {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .interim-ghost {
+            color: #94a3b8;
+            text-decoration: underline dotted #3b82f6;
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        .note-item.active {
+            background-color: #ffffff;
+            border-left: 4px solid #2563eb;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+        }
+
+        .note-actions {
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .note-item:hover .note-actions {
+            opacity: 1;
+        }
+
+        #editor:empty:before {
+            content: attr(placeholder);
+            color: #cbd5e1;
+            cursor: text;
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .title-edit-input {
+            width: 100%;
+            background: white;
+            border: 1px solid #3b82f6;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 0.875rem;
+            outline: none;
+        }
+
+        .date-header {
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            margin: 1.5rem 0.5rem 0.5rem 0.5rem;
+        }
+    </style>
+</head>
+<body class="flex h-screen w-screen overflow-hidden">
+
+    <!-- Sidebar Thư viện -->
+    <aside class="sidebar bg-slate-50 border-r border-slate-200 flex flex-col h-full z-20 shrink-0">
+        <div class="p-6 border-b border-slate-200 bg-white">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="bg-blue-600 p-2.5 rounded-xl shadow-blue-200 shadow-lg">
+                    <i class="fas fa-bolt text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-none">VoiceNote Pro</h1>
+                    <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Xử lý tốc độ cao</span>
+                </div>
+            </div>
+            <button onclick="createNewNote()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95">
+                <i class="fas fa-plus-circle"></i>
+                <span>Ghi chú mới</span>
+            </button>
+        </div>
+
+        <div id="note-list" class="flex-1 overflow-y-auto p-3">
+            <!-- Render bài viết -->
+        </div>
+
+        <div class="p-4 border-t border-slate-200 bg-white text-[10px] text-slate-400 text-center flex items-center justify-center gap-2">
+            <i class="fas fa-tachometer-alt text-blue-500"></i>
+            <span class="uppercase tracking-widest font-bold">Thời gian thực: &lt; 0.5s</span>
+        </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col h-full min-w-0 bg-white">
+        <header class="bg-white/90 backdrop-blur-md p-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4 z-10">
+            <div class="flex items-center gap-4">
+                <div class="flex flex-col">
+                    <span id="save-status" class="text-[10px] uppercase tracking-wider text-blue-600 font-black bg-blue-50 px-2 py-1 rounded w-fit border border-blue-100">Đã đồng bộ</span>
+                </div>
+                <div class="h-6 w-[1px] bg-slate-200 hidden md:block"></div>
+                <select id="languageSelect" class="bg-transparent text-slate-700 text-sm font-bold outline-none cursor-pointer hover:text-blue-600 transition-colors">
+                    <option value="vi-VN">🇻🇳 Tiếng Việt</option>
+                    <option value="ja-JP">🇯🇵 日本語</option>
+                    <option value="en-US">🇺🇸 English (US)</option>
+                </select>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button id="recordBtn" class="flex items-center gap-3 px-8 py-3 bg-slate-900 text-white rounded-full hover:bg-slate-800 transition-all shadow-xl font-bold active:scale-95">
+                    <i class="fas fa-microphone" id="micIcon"></i>
+                    <span id="btnText">Ghi âm ngay</span>
+                </button>
+
+                <div class="h-8 w-[1px] bg-slate-200 mx-2 hidden md:block"></div>
+
+                <button onclick="saveCurrentNote()" class="px-6 py-3 bg-blue-600 text-white hover:bg-blue-700 rounded-2xl transition-all shadow-lg flex items-center gap-2 font-bold active:scale-95">
+                    <i class="fas fa-save"></i>
+                    <span>Lưu bài</span>
+                </button>
+
+                <button id="grammarBtn" onclick="checkGrammar()" class="px-5 py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-2xl transition-all shadow-lg flex items-center gap-2 font-bold">
+                    <i class="fas fa-wand-magic-sparkles"></i>
+                    <span id="grammarBtnText" class="hidden sm:inline">AI Sửa bài</span>
+                </button>
+
+                <div class="flex items-center bg-slate-100 rounded-2xl p-1 gap-1 ml-2">
+                    <button onclick="downloadFile()" class="p-3 text-slate-600 hover:bg-white rounded-xl transition-all"><i class="fas fa-file-export"></i></button>
+                    <button onclick="deleteActiveNote()" class="p-3 text-red-500 hover:bg-white rounded-xl transition-all"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-4 md:p-12 bg-slate-50/20">
+            <div class="max-w-4xl mx-auto">
+                <div 
+                    id="editor" 
+                    contenteditable="true" 
+                    class="paper w-full bg-white rounded-[2rem] p-12 md:p-24 text-slate-800 text-lg md:text-2xl shadow-xl border border-slate-100 focus:border-blue-400 transition-all duration-300"
+                    placeholder="Nói để gõ văn bản tốc độ cao..."
+                ></div>
+            </div>
+        </div>
+
+        <div id="recording-indicator" class="hidden fixed bottom-12 right-12 bg-red-600 text-white px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 z-50 animate-pulse">
+            <div class="w-3 h-3 bg-white rounded-full recording-pulse"></div>
+            <span class="text-sm font-black uppercase tracking-widest">Đang nghe & gõ...</span>
+        </div>
+    </main>
+
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl shadow-2xl opacity-0 pointer-events-none transform translate-y-4 flex items-center gap-3 transition-all duration-500 z-[100]">
+        <i id="toastIcon" class="fas fa-info-circle"></i>
+        <span id="toastMessage" class="font-medium text-sm">Thông báo</span>
+    </div>
+
+    <script>
+        let notes = JSON.parse(localStorage.getItem('voicenote_v6_lib') || '[]');
+        let activeNoteId = localStorage.getItem('voicenote_v6_active_id') || null;
+        let editingId = null;
+        const apiKey = ""; 
+
+        let isRecording = false;
+        let recognition = null;
+        let autoSaveTimeout = null;
+        let globalIntervalId = null;
+        let lastSpeechTime = 0;
+        const PAUSE_FOR_NEW_LINE = 1500; 
+
+        const editor = document.getElementById('editor');
+        const noteList = document.getElementById('note-list');
+        const recordBtn = document.getElementById('recordBtn');
+        const btnText = document.getElementById('btnText');
+        const micIcon = document.getElementById('micIcon');
+        const indicator = document.getElementById('recording-indicator');
+        const languageSelect = document.getElementById('languageSelect');
+        const saveStatus = document.getElementById('save-status');
+        const grammarBtn = document.getElementById('grammarBtn');
+
+        window.onload = () => {
+            if (notes.length === 0) createNewNote();
+            else {
+                renderSidebar();
+                loadNote(activeNoteId || notes[0].id);
+            }
+            setupRecognition();
+            startGlobalAutoSave();
+        };
+
+        function startGlobalAutoSave() {
+            if (globalIntervalId) clearInterval(globalIntervalId);
+            globalIntervalId = setInterval(() => saveCurrentNote(true), 60000);
+        }
+
+        function createNewNote() {
+            const id = 'note_' + Date.now();
+            const now = new Date();
+            const newNote = {
+                id,
+                title: 'Bản ghi ' + now.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}),
+                content: '',
+                lastModified: now.getTime(),
+                isManualTitle: false
+            };
+            notes.unshift(newNote);
+            activeNoteId = id;
+            syncStorage();
+            renderSidebar();
+            loadNote(id);
+        }
+
+        function loadNote(id) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                activeNoteId = id;
+                editor.innerHTML = note.content; 
+                localStorage.setItem('voicenote_v6_active_id', id);
+                renderSidebar();
+                saveStatus.innerText = "Đã tải";
+            }
+        }
+
+        function renderSidebar() {
+            noteList.innerHTML = '';
+            const groups = { 'Hôm nay': [], 'Hôm qua': [], 'Cũ hơn': [] };
+            const today = new Date().setHours(0,0,0,0);
+            const yesterday = today - 86400000;
+
+            notes.forEach(note => {
+                const date = new Date(note.lastModified).setHours(0,0,0,0);
+                if (date === today) groups['Hôm nay'].push(note);
+                else if (date === yesterday) groups['Hôm qua'].push(note);
+                else groups['Cũ hơn'].push(note);
+            });
+
+            for (const [groupName, groupNotes] of Object.entries(groups)) {
+                if (groupNotes.length > 0) {
+                    const header = document.createElement('div');
+                    header.className = 'date-header';
+                    header.innerText = groupName;
+                    noteList.appendChild(header);
+
+                    groupNotes.forEach(note => {
+                        const item = document.createElement('div');
+                        item.className = `note-item p-4 rounded-2xl cursor-pointer transition-all border border-transparent flex flex-col gap-1 mb-1 ${note.id === activeNoteId ? 'active' : 'hover:bg-slate-200/50'}`;
+                        item.onclick = () => { if (!editingId) handleNoteSelect(note.id); };
+
+                        const isEditing = editingId === note.id;
+                        if (isEditing) {
+                            item.innerHTML = `
+                                <input type="text" class="title-edit-input" value="${note.title}" 
+                                       onblur="confirmTitleEdit('${note.id}', this.value)" 
+                                       onkeydown="if(event.key==='Enter') confirmTitleEdit('${note.id}', this.value)" 
+                                       onclick="event.stopPropagation()">
+                            `;
+                        } else {
+                            item.innerHTML = `
+                                <div class="flex items-center justify-between group/act">
+                                    <div class="flex items-center gap-3 overflow-hidden flex-1">
+                                        <div class="w-1.5 h-1.5 rounded-full ${note.id === activeNoteId ? 'bg-blue-600' : 'bg-slate-300'}"></div>
+                                        <div class="overflow-hidden flex-1">
+                                            <h3 class="font-bold text-slate-700 text-sm truncate">${note.title || 'Chưa đặt tên'}</h3>
+                                            <p class="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">${new Date(note.lastModified).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</p>
+                                        </div>
+                                    </div>
+                                    <div class="note-actions flex items-center gap-1 pl-2">
+                                        <button onclick="startTitleEdit('${note.id}', event)" class="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg bg-white shadow-sm border border-slate-100"><i class="fas fa-pen text-[10px]"></i></button>
+                                        <button onclick="deleteNoteById('${note.id}', event)" class="p-1.5 text-slate-400 hover:text-red-500 rounded-lg bg-white shadow-sm border border-slate-100"><i class="fas fa-trash text-[10px]"></i></button>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        noteList.appendChild(item);
+                        if (isEditing) item.querySelector('input').focus();
+                    });
+                }
+            }
+        }
+
+        function handleNoteSelect(id) {
+            if (id === activeNoteId) return;
+            saveCurrentNote();
+            if (isRecording) stopRecording();
+            loadNote(id);
+        }
+
+        function startTitleEdit(id, e) {
+            e.stopPropagation();
+            editingId = id;
+            renderSidebar();
+        }
+
+        function confirmTitleEdit(id, newVal) {
+            const note = notes.find(n => n.id === id);
+            if (note && newVal.trim()) {
+                note.title = newVal.trim();
+                note.isManualTitle = true;
+                syncStorage();
+            }
+            editingId = null;
+            renderSidebar();
+        }
+
+        function syncStorage() {
+            localStorage.setItem('voicenote_v6_lib', JSON.stringify(notes));
+        }
+
+        // Tối ưu hóa xử lý tốc độ cao
+        function setupRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return;
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1; // Chỉ lấy 1 kết quả tốt nhất để tăng tốc
+
+            recognition.onstart = () => {
+                isRecording = true;
+                lastSpeechTime = Date.now();
+                updateRecordUI();
+            };
+
+            recognition.onresult = (event) => {
+                let final = '';
+                let interim = '';
+
+                // Chỉ duyệt từ resultIndex mới nhất để tối ưu hiệu năng
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const result = event.results[i];
+                    if (result.isFinal) final += result[0].transcript;
+                    else interim += result[0].transcript;
+                }
+
+                if (final || interim) {
+                    // Loại bỏ ghost cũ siêu tốc
+                    const ghost = editor.querySelector('.interim-ghost');
+                    if (ghost) ghost.parentNode.removeChild(ghost);
+
+                    if (final) {
+                        const now = Date.now();
+                        if (now - lastSpeechTime > PAUSE_FOR_NEW_LINE) {
+                            document.execCommand('insertParagraph', false);
+                        }
+                        // Chèn văn bản chính thức
+                        document.execCommand('insertText', false, final + ' ');
+                        lastSpeechTime = now;
+                        autoSave();
+                    }
+
+                    if (interim) {
+                        // Chèn văn bản tạm thời với DOM Node trực tiếp
+                        const selection = window.getSelection();
+                        if (selection.rangeCount > 0) {
+                            const range = selection.getRangeAt(0);
+                            const span = document.createElement('span');
+                            span.className = 'interim-ghost';
+                            span.textContent = interim;
+                            range.insertNode(span);
+                            // Giữ con trỏ ở cuối đoạn tạm thời
+                            selection.modify("move", "forward", "character");
+                        }
+                    }
+                }
+            };
+
+            recognition.onend = () => { if (isRecording) try { recognition.start(); } catch(e) {} else updateRecordUI(); };
+        }
+
+        function toggleRecording() {
+            if (!isRecording) {
+                editor.focus();
+                recognition.lang = languageSelect.value;
+                recognition.start();
+            } else {
+                stopRecording();
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            if (recognition) recognition.stop();
+            const ghost = editor.querySelector('.interim-ghost');
+            if (ghost) ghost.remove();
+            updateRecordUI();
+            saveCurrentNote();
+        }
+
+        function updateRecordUI() {
+            if (isRecording) {
+                recordBtn.classList.replace('bg-slate-900', 'bg-red-600');
+                btnText.innerText = "Dừng ghi";
+                micIcon.className = "fas fa-stop recording-pulse";
+                indicator.classList.remove('hidden');
+            } else {
+                recordBtn.classList.replace('bg-red-600', 'bg-slate-900');
+                btnText.innerText = "Ghi âm ngay";
+                micIcon.className = "fas fa-microphone";
+                indicator.classList.add('hidden');
+            }
+        }
+
+        async function checkGrammar() {
+            const content = editor.innerText.trim();
+            if (!content) return showToast("Văn bản trống", "info-circle");
+            if (isRecording) stopRecording();
+            grammarBtn.disabled = true;
+            saveStatus.innerText = "AI đang xử lý...";
+            const prompt = "Sửa lỗi chính tả, ngữ pháp Việt-Nhật-Anh. Chỉ trả về văn bản kết quả.";
+            try {
+                const result = await callGemini(content, prompt);
+                if (result) {
+                    editor.innerText = result;
+                    saveCurrentNote();
+                    showToast("Đã tối ưu!", "magic");
+                }
+            } catch (e) {
+                showToast("Lỗi AI", "exclamation-circle");
+            } finally {
+                grammarBtn.disabled = false;
+                saveStatus.innerText = "Xong";
+            }
+        }
+
+        async function callGemini(txt, system) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: txt }] }],
+                systemInstruction: { parts: [{ text: system }] }
+            };
+            const resp = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+            const data = await resp.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text;
+        }
+
+        function autoSave() {
+            clearTimeout(autoSaveTimeout);
+            autoSaveTimeout = setTimeout(() => saveCurrentNote(), 1000);
+        }
+
+        function saveCurrentNote(isSilent = false) {
+            const note = notes.find(n => n.id === activeNoteId);
+            if (note) {
+                note.content = editor.innerHTML;
+                if (!note.isManualTitle) {
+                    const firstLine = editor.innerText.trim().split('\n')[0].substring(0, 35);
+                    if (firstLine) note.title = firstLine;
+                }
+                note.lastModified = Date.now();
+                syncStorage();
+                renderSidebar();
+                if (!isSilent) saveStatus.innerText = "Đã lưu";
+            }
+        }
+
+        function deleteNoteById(id, e) {
+            e.stopPropagation();
+            if (notes.length <= 1) return showToast("Cần giữ lại 1 bài", "info-circle");
+            if (confirm("Xóa bản ghi này?")) {
+                notes = notes.filter(n => n.id !== id);
+                if (id === activeNoteId) loadNote(notes[0].id);
+                syncStorage();
+                renderSidebar();
+                showToast("Đã xóa", "trash-alt");
+            }
+        }
+
+        function deleteActiveNote() { deleteNoteById(activeNoteId, {stopPropagation:()=>{}}); }
+
+        function downloadFile() {
+            const blob = new Blob([editor.innerText], {type: 'text/plain'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `VoiceNote_${activeNoteId}.txt`;
+            a.click();
+        }
+
+        function showToast(msg, icon) {
+            const t = document.getElementById('toast');
+            document.getElementById('toastMessage').innerText = msg;
+            document.getElementById('toastIcon').className = `fas fa-${icon}`;
+            t.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            setTimeout(() => t.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none'), 3000);
+        }
+
+        recordBtn.addEventListener('click', toggleRecording);
+        editor.addEventListener('input', autoSave);
+    </script>
+</body>
+</html>
